@@ -4,7 +4,7 @@ library(ambient)
 
 wi <- 50 # width
 hi <- 50 # height
-c_ <- 0.1 # erosion constant
+c_ <- 0.01 # erosion constant
 
 # generating perlin noise dataframe
 noise <- noise_perlin(
@@ -22,6 +22,9 @@ while (i < 100) {
   # looping through all pixels
   for (j in seq(ncol(noise))) {
     for (k in seq(nrow(noise))) {
+
+      # TODO: water fixel continuation
+
       # checking if pixel is in scope
       if (k > 1 & k < wi & j > 1 & j < hi) {
 
