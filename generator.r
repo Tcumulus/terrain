@@ -1,56 +1,137 @@
-# https://www.firespark.de/resources/downloads/implementation%20of%20a%20methode%20for%20hydraulic%20erosion.pdf
+# https://www.firespark.de/resources/downloads/implementation%20of%20a%20methode%20for%20hydraulic%20erosion.pdf # nolint
+# https://github.com/SebLague/Hydraulic-Erosion/blob/master/Assets/Scripts/Erosion.cs  # nolint
 
 library(ambient)
 
-wi <- 50 # width
-hi <- 50 # height
-c_ <- 0.01 # erosion constant
+# iterations
+i_ <- 100000
+lifetime_ <- 12
+
+# parameters
+width <- 100
+height <- 100
+frequency_ <- 0.025
+
+# constants
+erosion_ <- 0.3
+deposition_ <- 0.3
+evaporation_ <- 0.05
+sediment_ <- 0.1
+sedimentn_ <- 0.001
+gravity <- 10
+
+# initials
+volume_ <- 0.01
+speed_ <- 0.01
+
 
 # generating perlin noise dataframe
-noise <- noise_perlin(
-  dim = c(hi, wi),
-  frequency = 0.05, # 0.005 for 500,500
+noise_ <- noise_perlin(
+  dim = c(height, width),
+  frequency = frequency_,
   interpolator = "hermite",
   octaves = 4,
 )
 
-noise_ <- noise # temporary copy
-i <- 0
+noise__ <- noise_ # temporary copy
 
-# iterations
-while (i < 100) {
-  # looping through all pixels
-  for (j in seq(ncol(noise))) {
-    for (k in seq(nrow(noise))) {
+# main function
+erode <- function(noise) {
 
-      # TODO: water fixel continuation
+  # select random pixel
+  x <- sample(1:width, 1)
+  y <- sample(1:height, 1)
 
-      # checking if pixel is in scope
-      if (k > 1 & k < wi & j > 1 & j < hi) {
+  # initialize
+  speed <- speed_
+  volume <- volume_
+  sediment <- 0
 
-        # get height of current pixel
-        h <- noise[k, j]
+  # get height of pixel
+  h <- noise[x, y]
 
-        # get delta height of all surounding pixels
-        d1 <- h - noise[k - 1, j] # left
-        d2 <- h - noise[k, j + 1] # top
-        d3 <- h - noise[k + 1, j] # right
-        d4 <- h - noise[k, j + 1] # bottom
+  # loop for the dropplet
+  lifetime <- 0
+  while (lifetime < lifetime_) {
 
-        # slope: max delta height difference (downwards)
-        d <- max(d1, d2, d3, d4)
+    # check if in scope
+    if (x > 1 & y > 1 & x < width & y < height) {
 
-        # erosion amount
-        c <- d * c_
+      # calculate height difference for the 4 neighboring pixels
+      dh_w <- noise[x - 1, y] - h # left (west)
+      dh_n <- noise[x, y - 1] - h # top (north)
+      dh_e <- noise[x + 1, y] - h # right (east)
+      dh_s <- noise[x, y + 1] - h # bottom (south)
 
-        # substract erosion amount from pixel
-        noise[k, j] <- h - c
+      # get the largest height difference
+      dh <- min(dh_w, dh_n, dh_e, dh_s)
+
+      # calculate sediment cap
+      sedimentcap <- max(-dh * speed * volume * sediment_, sedimentn_)
+
+      if (sediment < sedimentcap) {
+        # calculate erosion amount
+        erosion <- min((sedimentcap - sediment) * erosion_, -dh)
+
+        # update height
+        noise[x, y] <- noise[x, y] - erosion
+        sediment <- sediment + erosion
+      } else {
+        # calculate deposition amount
+        deposit <- (sediment - sedimentcap) * deposition_
+
+        # check if neighboring pixel is higher
+        if (dh < 0) {
+          # update height
+          noise[x, y] <- noise[x, y] - deposit
+          sediment <- sediment + deposit
+        } else {
+          # check if sediment is bigger than delta height
+          if (sediment < dh) {
+            # stagnant: deposit all
+            noise[x, y] <- noise[x, y] + sediment
+            break # end loop
+          } else {
+            # deposit up to delta height
+            deposit <- dh
+            noise[x, y] <- noise[x, y] - deposit
+            sediment <- sediment + deposit
+          }
+        }
+      }
+
+      # update x, y for new pixel
+      if (dh == dh_w) {
+        x <- x - 1
+      } else if (dh == dh_n) {
+        y <- y - 1
+      } else if (dh == dh_e) {
+        x <- x + 1
+      } else {
+        y <- y + 1
+      }
+
+      # update speed and volume
+      volume <- volume * (1 - evaporation_)
+      if (dh >= 0) {
+        speed <- speed_
+      } else {
+        speed <- sqrt(speed**2 - dh * gravity)
       }
     }
+    lifetime <- lifetime + 1
   }
+  return(noise)
+}
+
+
+# iterations
+i <- 0
+while (i < i_) {
+  noise_ <- erode(noise_)
   i <- i + 1
 }
 
 par(mfrow = c(1, 2))
+plot(as.raster(normalise(noise__)))
 plot(as.raster(normalise(noise_)))
-plot(as.raster(normalise(noise)))
