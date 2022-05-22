@@ -4,25 +4,25 @@
 library(ambient)
 
 # iterations
-i_ <- 100000
-lifetime_ <- 12
+i_ <- 50000
+lifetime_ <- 15
 
 # parameters
 width <- 100
 height <- 100
-frequency_ <- 0.025
+frequency_ <- 0.01
 
 # constants
 erosion_ <- 0.3
 deposition_ <- 0.3
-evaporation_ <- 0.05
-sediment_ <- 0.1
-sedimentn_ <- 0.001
-gravity <- 10
+evaporation_ <- 0.02
+sediment_ <- 1
+sedimentn_ <- 0.01
+gravity <- 4
 
 # initials
 volume_ <- 0.01
-speed_ <- 0.01
+speed_ <- 1
 
 
 # generating perlin noise dataframe
@@ -30,10 +30,15 @@ noise_ <- noise_perlin(
   dim = c(height, width),
   frequency = frequency_,
   interpolator = "hermite",
-  octaves = 4,
+  octaves = 4
 )
 
+# TODO: masking
+
 noise__ <- noise_ # temporary copy
+noise3 <- noise_
+noise4 <- noise_
+noise5 <- noise_
 
 # main function
 erode <- function(noise) {
@@ -69,35 +74,28 @@ erode <- function(noise) {
       # calculate sediment cap
       sedimentcap <- max(-dh * speed * volume * sediment_, sedimentn_)
 
-      if (sediment < sedimentcap) {
+      if (sediment > sedimentcap | dh > 0) {
+        # calculate deposition amount, if flowing uphill: fill up to height
+        deposit <- if (dh > 0) min(dh, sediment) else (sediment - sedimentcap) * deposition_ # nolint
+        deposit <- if (lifetime == lifetime_ - 1) sediment else deposit
+
+        # update height
+        noise[x, y] <- noise[x, y] - deposit
+        sediment <- sediment + deposit
+      } else {
         # calculate erosion amount
         erosion <- min((sedimentcap - sediment) * erosion_, -dh)
 
-        # update height
+        # update height of current pixel
         noise[x, y] <- noise[x, y] - erosion
         sediment <- sediment + erosion
-      } else {
-        # calculate deposition amount
-        deposit <- (sediment - sedimentcap) * deposition_
+      }
 
-        # check if neighboring pixel is higher
-        if (dh < 0) {
-          # update height
-          noise[x, y] <- noise[x, y] - deposit
-          sediment <- sediment + deposit
-        } else {
-          # check if sediment is bigger than delta height
-          if (sediment < dh) {
-            # stagnant: deposit all
-            noise[x, y] <- noise[x, y] + sediment
-            break # end loop
-          } else {
-            # deposit up to delta height
-            deposit <- dh
-            noise[x, y] <- noise[x, y] - deposit
-            sediment <- sediment + deposit
-          }
-        }
+      # temporary limits for infinite holes bug
+      if (noise[x, y] < -1) {
+        noise[x, y] <- -1
+      } else if (noise[x, y] > 1) {
+        noise[x, y] <- 1
       }
 
       # update x, y for new pixel
@@ -129,9 +127,21 @@ erode <- function(noise) {
 i <- 0
 while (i < i_) {
   noise_ <- erode(noise_)
+  if (i == 2500) {
+    noise3 <- noise_
+  }
+  if (i == 5000) {
+    noise4 <- noise_
+  }
+  if (i == 7500) {
+    noise5 <- noise_
+  }
   i <- i + 1
 }
 
-par(mfrow = c(1, 2))
+par(mfrow = c(2, 3))
 plot(as.raster(normalise(noise__)))
+plot(as.raster(normalise(noise3)))
+plot(as.raster(normalise(noise4)))
+plot(as.raster(normalise(noise5)))
 plot(as.raster(normalise(noise_)))
